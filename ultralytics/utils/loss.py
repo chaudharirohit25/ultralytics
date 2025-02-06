@@ -161,15 +161,18 @@ class v8DetectionLoss:
         """Initializes v8DetectionLoss with the model, defining model-related properties and BCE loss function."""
         device = next(model.parameters()).device  # get model device
         h = model.args  # hyperparameters
+        self.device = device
 
         m = model.model[-1]  # Detect() module
-        self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        
+        self.pos_weight = torch.tensor([1., 1., 1., 1., 1., 4.], device=self.device, dtype=dtype)  # shape: [6]
+        self.bce = nn.BCEWithLogitsLoss(reduction="none", pos_weight=pos_weight)
+        # self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.hyp = h
         self.stride = m.stride  # model strides
         self.nc = m.nc  # number of classes
         self.no = m.nc + m.reg_max * 4
         self.reg_max = m.reg_max
-        self.device = device
 
         self.use_dfl = m.reg_max > 1
 
