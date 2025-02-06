@@ -165,7 +165,7 @@ class v8DetectionLoss:
 
         m = model.model[-1]  # Detect() module
         
-        self.pos_weight = torch.tensor([1., 1., 1., 1., 1., 16.], device=self.device, dtype=torch.float)  # shape: [6]
+        self.pos_weight = torch.tensor([0.1111,0.1111,0.1111,0.1111,0.1111,0.4445], device=self.device, dtype=torch.float)  # shape: [6]
         self.bce = nn.BCEWithLogitsLoss(reduction="none", pos_weight=self.pos_weight)
         # self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.hyp = h
