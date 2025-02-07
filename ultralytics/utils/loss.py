@@ -246,16 +246,17 @@ class v8DetectionLoss:
 
         target_scores_sum = max(target_scores.sum(), 1)
         target_labels = gt_labels
-        target_labels = target_labels.unsqueeze(-1).expand(-1, -1, self.nc) # self.nc: class num
-        one_hot = torch.zeros(target_labels.size(), device=self.device)
-        one_hot.scatter_(-1, target_labels, 1)
-        # target_labels = one_hot
+        
+        # target_labels = target_labels.unsqueeze(-1).expand(-1, -1, self.nc) # self.nc: class num
+        # one_hot = torch.zeros(target_labels.size(), device=self.device)
+        # one_hot.scatter_(-1, target_labels, 1)
+        # # target_labels = one_hot
+        # one_hot :{one_hot.size()}
 
         print("""Shapes :
         pred_scores :{pred_scores.size()}
         target_scores :{target_scores.size()}
         target_labels :{target_labels.size()}
-        one_hot :{one_hot.size()}
         targets :{targets.size()}
         """)
         # Cls loss
