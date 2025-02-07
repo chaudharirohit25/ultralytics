@@ -252,6 +252,7 @@ class v8DetectionLoss:
         # one_hot.scatter_(-1, target_labels, 1)
         # # target_labels = one_hot
         # one_hot :{one_hot.size()}
+        target_labels = target_labels.long()
         one_hot_labels = torch.zeros((target_labels.shape[0], target_labels.shape[1], 6), device=target_labels.device)
         one_hot_labels.scatter_(2, target_labels, 1)
         print(f"""Shapes :
