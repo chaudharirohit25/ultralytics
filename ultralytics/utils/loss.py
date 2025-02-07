@@ -253,7 +253,7 @@ class v8DetectionLoss:
         # # target_labels = one_hot
         # one_hot :{one_hot.size()}
 
-        print("""Shapes :
+        print(f"""Shapes :
         pred_scores :{pred_scores.size()}
         target_scores :{target_scores.size()}
         target_labels :{target_labels.size()}
