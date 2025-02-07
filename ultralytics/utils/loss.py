@@ -167,7 +167,7 @@ class v8DetectionLoss:
         
         self.pos_weight = torch.tensor([0.1111,0.1111,0.1111,0.1111,0.1111,0.4445], device=self.device, dtype=torch.float)  # shape: [6]
         self.bce = nn.BCEWithLogitsLoss(reduction="none", pos_weight=self.pos_weight)
-        self.varifocal_loss = VarifocalLoss()
+        self.focal_loss = FocalLoss()
         # self.bce = nn.BCEWithLogitsLoss(reduction="none")
         self.hyp = h
         self.stride = m.stride  # model strides
@@ -245,28 +245,27 @@ class v8DetectionLoss:
         )
 
         target_scores_sum = max(target_scores.sum(), 1)
-        target_labels = gt_labels
-        
+        # target_labels = gt_labels
         # target_labels = target_labels.unsqueeze(-1).expand(-1, -1, self.nc) # self.nc: class num
         # one_hot = torch.zeros(target_labels.size(), device=self.device)
         # one_hot.scatter_(-1, target_labels, 1)
         # # target_labels = one_hot
         # one_hot :{one_hot.size()}
-        target_labels = target_labels.long()
-        one_hot_labels = torch.zeros((target_labels.shape[0], target_labels.shape[1], 6), device=target_labels.device)
-        one_hot_labels.scatter_(2, target_labels, 1)
-        print(f"""Shapes :
-        pred_scores :{pred_scores.size()}
-        target_scores :{target_scores.size()}
-        target_labels :{target_labels.size()}
-        targets :{targets.size()}
-        one_hot_labels : {one_hot_labels.size()}
-        """)
+        # target_labels = target_labels.long()
+        # one_hot_labels = torch.zeros((target_labels.shape[0], target_labels.shape[1], 6), device=target_labels.device)
+        # one_hot_labels.scatter_(2, target_labels, 1)
+        # print(f"""Shapes :
+        # pred_scores :{pred_scores.size()}
+        # target_scores :{target_scores.size()}
+        # target_labels :{target_labels.size()}
+        # targets :{targets.size()}
+        # one_hot_labels : {one_hot_labels.size()}
+        # """)
         # one_hot_labels
         # Cls loss
-        loss[1] = self.varifocal_loss(pred_scores, target_scores, one_hot_labels) / target_scores_sum  # VFL way
+        # loss[1] = self.varifocal_loss(pred_scores, target_scores, one_hot_labels) / target_scores_sum  # VFL way
         # loss[1] = self.bce(pred_scores, target_scores.to(dtype)).sum() / target_scores_sum  # BCE
-
+        loss[1] = self.focal_loss(pred_scores, target_scores.to(dtype))
         # Bbox loss
         if fg_mask.sum():
             target_bboxes /= stride_tensor
