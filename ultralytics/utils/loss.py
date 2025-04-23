@@ -625,16 +625,20 @@ class v8ClassificationLoss:
         # 1. Unpack logits
         logits = preds[1] if isinstance(preds, (list, tuple)) else preds
         target = batch["cls"]
-
+        print(f"logits size : {logits.size()}")
+        print(f"target size : {logtargetits.size()}")
         # 2. Compute per-sample losses (no reduction) :contentReference[oaicite:0]{index=0}
         per_sample_loss = F.cross_entropy(logits, target, reduction='none')
+        print(f"per_sample_loss size : {per_sample_loss.size()}")
 
         # 3. Build per-sample weight tensor by indexing base weights :contentReference[oaicite:1]{index=1}
         device = logits.device
         weights = self.class_weights.to(device)[target]
+        print(f"weights size : {weights.size()}")
 
         # 4. Apply weights and aggregate
         loss = (per_sample_loss * weights).mean()                          # :contentReference[oaicite:2]{index=2}
+        
         return loss, loss.detach()
 
 class v8OBBLoss(v8DetectionLoss):
