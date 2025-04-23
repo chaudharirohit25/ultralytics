@@ -593,16 +593,49 @@ class v8PoseLoss(v8DetectionLoss):
         return kpts_loss, kpts_obj_loss
 
 
+# class v8ClassificationLoss:
+#     """Criterion class for computing training losses for classification."""
+
+#     def __call__(self, preds, batch):
+#         """Compute the classification loss between predictions and true labels."""
+#         preds = preds[1] if isinstance(preds, (list, tuple)) else preds
+#         loss = F.cross_entropy(preds, batch["cls"], reduction="mean")
+#         loss_items = loss.detach()
+#         return loss, loss_items
+        
 class v8ClassificationLoss:
-    """Criterion class for computing training losses for classification."""
+    """Criterion class computing weighted cross-entropy per-instance."""
+    def __init__(self, class_weights=(1.0, 2.0, 4.0)):
+        """
+        Args:
+            class_weights: tuple of length C specifying the multiplier for 
+                           each ground-truth class (e.g., 4× for class 2).
+        """
+        self.class_weights = torch.tensor(class_weights, dtype=torch.float)
 
     def __call__(self, preds, batch):
-        """Compute the classification loss between predictions and true labels."""
-        preds = preds[1] if isinstance(preds, (list, tuple)) else preds
-        loss = F.cross_entropy(preds, batch["cls"], reduction="mean")
-        loss_items = loss.detach()
-        return loss, loss_items
+        """
+        Args:
+            preds: logits tensor, or a tuple/list where preds[1] are the logits.
+            batch["cls"]: LongTensor of shape (N,) with true class indices.
+        Returns:
+            loss: scalar weighted loss;
+            loss_items: detached scalar for logging.
+        """
+        # 1. Unpack logits
+        logits = preds[1] if isinstance(preds, (list, tuple)) else preds
+        target = batch["cls"]
 
+        # 2. Compute per-sample losses (no reduction) :contentReference[oaicite:0]{index=0}
+        per_sample_loss = F.cross_entropy(logits, target, reduction='none')
+
+        # 3. Build per-sample weight tensor by indexing base weights :contentReference[oaicite:1]{index=1}
+        device = logits.device
+        weights = self.class_weights.to(device)[target]
+
+        # 4. Apply weights and aggregate
+        loss = (per_sample_loss * weights).mean()                          # :contentReference[oaicite:2]{index=2}
+        return loss, loss.detach()
 
 class v8OBBLoss(v8DetectionLoss):
     """Calculates losses for object detection, classification, and box distribution in rotated YOLO models."""
