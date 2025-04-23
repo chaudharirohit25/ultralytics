@@ -604,41 +604,45 @@ class v8PoseLoss(v8DetectionLoss):
 #         return loss, loss_items
         
 class v8ClassificationLoss:
-    """Criterion class computing weighted cross-entropy per-instance."""
+    """YOLOv8 classification loss with optional 3-class weighting."""
+
     def __init__(self, class_weights=(1.0, 2.0, 4.0)):
         """
         Args:
-            class_weights: tuple of length C specifying the multiplier for 
-                           each ground-truth class (e.g., 4× for class 2).
+            class_weights: tuple of length 3 giving the per-class multipliers
+                           for the 3-class scenario.
         """
+        # store base weights as a tensor (no need to register_buffer here,
+        # since we .to(device) later)
         self.class_weights = torch.tensor(class_weights, dtype=torch.float)
 
     def __call__(self, preds, batch):
         """
         Args:
-            preds: logits tensor, or a tuple/list where preds[1] are the logits.
-            batch["cls"]: LongTensor of shape (N,) with true class indices.
+            preds: logits or (something, logits)
+            batch["cls"]: LongTensor of shape (N,) with true labels [0..C-1].
         Returns:
-            loss: scalar weighted loss;
-            loss_items: detached scalar for logging.
+            loss: scalar
+            loss_items: detached scalar for logging
         """
         # 1. Unpack logits
         logits = preds[1] if isinstance(preds, (list, tuple)) else preds
         target = batch["cls"]
-        print(f"logits size : {logits.size()}")
-        print(f"target size : {logtargetits.size()}")
-        # 2. Compute per-sample losses (no reduction) :contentReference[oaicite:0]{index=0}
-        per_sample_loss = F.cross_entropy(logits, target, reduction='none')
-        print(f"per_sample_loss size : {per_sample_loss.size()}")
+        C = logits.size(1)
 
-        # 3. Build per-sample weight tensor by indexing base weights :contentReference[oaicite:1]{index=1}
-        device = logits.device
-        weights = self.class_weights.to(device)[target]
-        print(f"weights size : {weights.size()}")
+        # 2. If 3-class scenario, apply per-instance weighting
+        if C == self.class_weights.numel():
+            # per-sample losses
+            per_sample = F.cross_entropy(logits, target, reduction='none')              :contentReference[oaicite:0]{index=0}
+            # build weights tensor by indexing into base weights
+            device = logits.device
+            weights = self.class_weights.to(device)[target]                             :contentReference[oaicite:1]{index=1}
+            # weighted mean
+            loss = (per_sample * weights).mean()
+        else:
+            # fallback to standard mean-reduced CE
+            loss = F.cross_entropy(logits, target, reduction='mean')                    :contentReference[oaicite:2]{index=2}
 
-        # 4. Apply weights and aggregate
-        loss = (per_sample_loss * weights).mean()                          # :contentReference[oaicite:2]{index=2}
-        
         return loss, loss.detach()
 
 class v8OBBLoss(v8DetectionLoss):
