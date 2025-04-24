@@ -633,15 +633,15 @@ class v8ClassificationLoss:
         # 2. If 3-class scenario, apply per-instance weighting
         if C == self.class_weights.numel():
             # per-sample losses
-            per_sample = F.cross_entropy(logits, target, reduction='none')              :contentReference[oaicite:0]{index=0}
+            per_sample = F.cross_entropy(logits, target, reduction='none')              #:contentReference[oaicite:0]{index=0}
             # build weights tensor by indexing into base weights
             device = logits.device
-            weights = self.class_weights.to(device)[target]                             :contentReference[oaicite:1]{index=1}
+            weights = self.class_weights.to(device)[target]                             #:contentReference[oaicite:1]{index=1}
             # weighted mean
             loss = (per_sample * weights).mean()
         else:
             # fallback to standard mean-reduced CE
-            loss = F.cross_entropy(logits, target, reduction='mean')                    :contentReference[oaicite:2]{index=2}
+            loss = F.cross_entropy(logits, target, reduction='mean')                    #:contentReference[oaicite:2]{index=2}
 
         return loss, loss.detach()
 
