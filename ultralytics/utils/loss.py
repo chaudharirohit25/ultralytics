@@ -603,47 +603,96 @@ class v8PoseLoss(v8DetectionLoss):
 #         loss_items = loss.detach()
 #         return loss, loss_items
         
-class v8ClassificationLoss:
-    """YOLOv8 classification loss with optional 3-class weighting."""
+# class v8ClassificationLoss:
+#     """YOLOv8 classification loss with optional 3-class weighting."""
 
-    def __init__(self, class_weights=(1.0, 2.0, 4.0)):
+#     def __init__(self, class_weights=(1.0, 2.0, 4.0)):
+#         """
+#         Args:
+#             class_weights: tuple of length 3 giving the per-class multipliers
+#                            for the 3-class scenario.
+#         """
+#         # store base weights as a tensor (no need to register_buffer here,
+#         # since we .to(device) later)
+#         self.class_weights = torch.tensor(class_weights, dtype=torch.float)
+
+#     def __call__(self, preds, batch):
+#         """
+#         Args:
+#             preds: logits or (something, logits)
+#             batch["cls"]: LongTensor of shape (N,) with true labels [0..C-1].
+#         Returns:
+#             loss: scalar
+#             loss_items: detached scalar for logging
+#         """
+#         # 1. Unpack logits
+#         logits = preds[1] if isinstance(preds, (list, tuple)) else preds
+#         target = batch["cls"]
+#         C = logits.size(1)
+
+#         # 2. If 3-class scenario, apply per-instance weighting
+#         if C == self.class_weights.numel():
+#             # per-sample losses
+#             per_sample = F.cross_entropy(logits, target, reduction='none')              #:contentReference[oaicite:0]{index=0}
+#             # build weights tensor by indexing into base weights
+#             device = logits.device
+#             weights = self.class_weights.to(device)[target]                             #:contentReference[oaicite:1]{index=1}
+#             # weighted mean
+#             loss = (per_sample * weights).mean()
+#         else:
+#             # fallback to standard mean-reduced CE
+#             loss = F.cross_entropy(logits, target, reduction='mean')                    #:contentReference[oaicite:2]{index=2}
+
+#         return loss, loss.detach()
+
+import torch
+import torch.nn.functional as F
+
+class v8ClassificationLoss:
+    """YOLOv8 loss that uses Focal Loss when C==3, else plain CrossEntropy."""
+    def __init__(
+        self,
+        class_weights=(1.0, 2.0, 4.0),
+        gamma: float = 2.0,
+    ):
         """
         Args:
-            class_weights: tuple of length 3 giving the per-class multipliers
-                           for the 3-class scenario.
+            class_weights: α values for each of the 3 classes.
+            gamma: focusing parameter γ ≥ 0 (γ=0 ↔ cross‐entropy).
         """
-        # store base weights as a tensor (no need to register_buffer here,
-        # since we .to(device) later)
-        self.class_weights = torch.tensor(class_weights, dtype=torch.float)
+        self.alpha = torch.tensor(class_weights, dtype=torch.float)
+        self.gamma = gamma
 
     def __call__(self, preds, batch):
-        """
-        Args:
-            preds: logits or (something, logits)
-            batch["cls"]: LongTensor of shape (N,) with true labels [0..C-1].
-        Returns:
-            loss: scalar
-            loss_items: detached scalar for logging
-        """
-        # 1. Unpack logits
+        # 1. Unpack logits and targets
         logits = preds[1] if isinstance(preds, (list, tuple)) else preds
         target = batch["cls"]
         C = logits.size(1)
 
-        # 2. If 3-class scenario, apply per-instance weighting
-        if C == self.class_weights.numel():
-            # per-sample losses
-            per_sample = F.cross_entropy(logits, target, reduction='none')              #:contentReference[oaicite:0]{index=0}
-            # build weights tensor by indexing into base weights
+        # 2. If exactly 3 classes, apply Focal Loss
+        if C == self.alpha.numel():
+            # a) per-sample CE loss (no reduction) :contentReference[oaicite:3]{index=3}
+            ce_loss = F.cross_entropy(logits, target, reduction='none')
+
+            # b) compute p_t = exp(−CE) #:contentReference[oaicite:4]{index=4}
+            pt = torch.exp(-ce_loss)
+
+            # c) get α_t per sample by indexing into instance weights :contentReference[oaicite:5]{index=5}
             device = logits.device
-            weights = self.class_weights.to(device)[target]                             #:contentReference[oaicite:1]{index=1}
-            # weighted mean
-            loss = (per_sample * weights).mean()
+            alpha_t = self.alpha.to(device)[target]
+
+            # d) focal modulation: α_t · (1 − p_t)^γ · CE  :contentReference[oaicite:6]{index=6}
+            focal_loss = alpha_t * (1 - pt) ** self.gamma * ce_loss
+
+            # e) aggregate
+            loss = focal_loss.mean()                                                   #:contentReference[oaicite:7]{index=7}
         else:
-            # fallback to standard mean-reduced CE
-            loss = F.cross_entropy(logits, target, reduction='mean')                    #:contentReference[oaicite:2]{index=2}
+            # 3-class case not met → plain CE
+            loss = F.cross_entropy(logits, target, reduction='mean')
 
         return loss, loss.detach()
+
+
 
 class v8OBBLoss(v8DetectionLoss):
     """Calculates losses for object detection, classification, and box distribution in rotated YOLO models."""
