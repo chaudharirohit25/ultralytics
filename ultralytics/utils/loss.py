@@ -645,23 +645,62 @@ class v8PoseLoss(v8DetectionLoss):
 
 #         return loss, loss.detach()
 
+# import torch
+# import torch.nn.functional as F
+
+# class v8ClassificationLoss:
+#     """YOLOv8 loss that uses Focal Loss when C==3, else plain CrossEntropy."""
+#     def __init__(
+#         self,
+#         class_weights=(1.0, 2.0, 4.0),
+#         gamma: float = 2.0,
+#     ):
+#         """
+#         Args:
+#             class_weights: α values for each of the 3 classes.
+#             gamma: focusing parameter γ ≥ 0 (γ=0 ↔ cross‐entropy).
+#         """
+#         self.alpha = torch.tensor(class_weights, dtype=torch.float)
+#         self.gamma = gamma
+
+#     def __call__(self, preds, batch):
+#         # 1. Unpack logits and targets
+#         logits = preds[1] if isinstance(preds, (list, tuple)) else preds
+#         target = batch["cls"]
+#         C = logits.size(1)
+
+#         # 2. If exactly 3 classes, apply Focal Loss
+#         if C == self.alpha.numel():
+#             # a) per-sample CE loss (no reduction) :contentReference[oaicite:3]{index=3}
+#             ce_loss = F.cross_entropy(logits, target, reduction='none')
+
+#             # b) compute p_t = exp(−CE) #:contentReference[oaicite:4]{index=4}
+#             pt = torch.exp(-ce_loss)
+
+#             # c) get α_t per sample by indexing into instance weights :contentReference[oaicite:5]{index=5}
+#             device = logits.device
+#             alpha_t = self.alpha.to(device)[target]
+
+#             # d) focal modulation: α_t · (1 − p_t)^γ · CE  :contentReference[oaicite:6]{index=6}
+#             focal_loss = alpha_t * (1 - pt) ** self.gamma * ce_loss
+
+#             # e) aggregate
+#             loss = focal_loss.mean()                                                   #:contentReference[oaicite:7]{index=7}
+#         else:
+#             # 3-class case not met → plain CE
+#             loss = F.cross_entropy(logits, target, reduction='mean')
+
+#         return loss, loss.detach()
+
 import torch
 import torch.nn.functional as F
 
 class v8ClassificationLoss:
-    """YOLOv8 loss that uses Focal Loss when C==3, else plain CrossEntropy."""
-    def __init__(
-        self,
-        class_weights=(1.0, 2.0, 4.0),
-        gamma: float = 2.0,
-    ):
-        """
-        Args:
-            class_weights: α values for each of the 3 classes.
-            gamma: focusing parameter γ ≥ 0 (γ=0 ↔ cross‐entropy).
-        """
-        self.alpha = torch.tensor(class_weights, dtype=torch.float)
-        self.gamma = gamma
+    """YOLOv8 loss that uses ordinal all-thresholds logistic loss if C==3, else plain CrossEntropy."""
+    def __init__(self):
+        # no α or γ needed here
+        # instantiate two BCEWithLogitsLoss modules
+        self.bce = torch.nn.BCEWithLogitsLoss(reduction='mean')
 
     def __call__(self, preds, batch):
         # 1. Unpack logits and targets
@@ -669,29 +708,31 @@ class v8ClassificationLoss:
         target = batch["cls"]
         C = logits.size(1)
 
-        # 2. If exactly 3 classes, apply Focal Loss
-        if C == self.alpha.numel():
-            # a) per-sample CE loss (no reduction) :contentReference[oaicite:3]{index=3}
-            ce_loss = F.cross_entropy(logits, target, reduction='none')
+        if C == 3:
+            # 2a. Prepare binary labels for "y>0" and "y>1"
+            # target_bin1 = 1 if class is moderate or severe
+            # target_bin2 = 1 if class is severe
+            target_bin1 = (target > 0).float()  # [N]
+            target_bin2 = (target > 1).float()  # [N]
 
-            # b) compute p_t = exp(−CE) #:contentReference[oaicite:4]{index=4}
-            pt = torch.exp(-ce_loss)
+            # 2b. Compute logit for P(y>0) via log-sum-exp of classes 1 and 2 :contentReference[oaicite:1]{index=1}
+            #     logit_bin1 = log(exp(logit1) + exp(logit2))
+            logit_bin1 = torch.logsumexp(logits[:, 1:], dim=1)  # [N]
 
-            # c) get α_t per sample by indexing into instance weights :contentReference[oaicite:5]{index=5}
-            device = logits.device
-            alpha_t = self.alpha.to(device)[target]
+            # 2c. Compute logit for P(y>1): just the logit of class 2
+            logit_bin2 = logits[:, 2]  # [N]
 
-            # d) focal modulation: α_t · (1 − p_t)^γ · CE  :contentReference[oaicite:6]{index=6}
-            focal_loss = alpha_t * (1 - pt) ** self.gamma * ce_loss
+            # 3. Compute binary cross-entropy on each threshold
+            loss1 = self.bce(logit_bin1, target_bin1)  # threshold at 0→1 boundary :contentReference[oaicite:2]{index=2}
+            loss2 = self.bce(logit_bin2, target_bin2)  # threshold at 1→2 boundary :contentReference[oaicite:3]{index=3}
 
-            # e) aggregate
-            loss = focal_loss.mean()                                                   #:contentReference[oaicite:7]{index=7}
+            # 4. Sum or average both losses
+            loss = 0.5 * (loss1 + loss2)
         else:
-            # 3-class case not met → plain CE
-            loss = F.cross_entropy(logits, target, reduction='mean')
+            # fallback: original YOLOv8 CE
+            loss = F.cross_entropy(logits, target, reduction='mean')  # standard multiclass CE
 
         return loss, loss.detach()
-
 
 
 class v8OBBLoss(v8DetectionLoss):
